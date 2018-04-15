@@ -87,6 +87,41 @@ class Overlay(object):
         connection.connect((self.server, self.port))
         self.connection = connection
 
+    def send_shape(self, shapeid, shape, color, fill, x, y, w, h, ttl):
+        """
+        Send a shape
+        :param shapeid:
+        :param shape:
+        :param color:
+        :param fill:
+        :param x:
+        :param y:
+        :param w:
+        :param h:
+        :param ttl:
+        :return:
+        """
+        if not self.connection:
+            ensure_service()
+            self.connect()
+
+        msg = {"id": shapeid,
+               "shape": shape,
+               "color": color,
+               "fill": fill,
+               "x": x, "y": y,
+               "w": w, "h": h,
+               "ttl": ttl
+               }
+        try:
+            print json.dumps(msg)
+            self.connection.send(json.dumps(msg))
+            self.connection.send("\n")
+        except Exception as err:
+            print "error in send_shape: {}".format(err)
+            self.connection = None
+            raise
+
     def send_message(self, msgid, text, color, x, y, ttl=4, size="normal"):
         """
         Send a message
