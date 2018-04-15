@@ -427,6 +427,7 @@ namespace EDMCOverlay
                     new Size(Scale(g.W, g.H)));
 
                 Brush fill = GetBrush(g.Fill);
+                Rectangle shapeRect = new Rectangle(Scale(g.X, g.Y), new Size(Scale(g.W, g.H)));
                 if (fill != null)
                 {                    
                     draw.FillRectangle(fill, shapeRect);
