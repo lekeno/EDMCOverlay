@@ -37,6 +37,20 @@ namespace EDMCOverlay
             public int Top;
             public int Right;
             public int Bottom;
+        }       
+
+        public bool HalfSize { get; set; }
+
+        public int XOffset { get; set; }
+        public int YOffset { get; set; }
+
+        Nullable<Point> forceLocation;
+        Nullable<Size> forceSize;
+
+        public void ForceGeometry(Point p, Size s)
+        {
+            forceLocation = p;
+            forceSize = s;
         }
 
         public EDGlassForm(System.Diagnostics.Process follow)
@@ -88,7 +102,10 @@ namespace EDMCOverlay
 
         public void FollowWindow()
         {
-            if (Follow == null) return;
+            if (Follow == null)
+            {                
+                return;
+            }
 
             if (this.InvokeRequired)
             {
@@ -97,11 +114,35 @@ namespace EDMCOverlay
             else
             {
                 RECT window = new RECT();
-                if (GetWindowRect(Follow.MainWindowHandle, ref window))
+                Point pos = new Point(300, 300);
+                Size siz = new Size(640, 400);
+
+                if (Process.GetCurrentProcess().Id != Follow.Id
+                    && GetWindowRect(Follow.MainWindowHandle, ref window))
                 {
-                    this.Location = new Point(window.Left, window.Top);
-                    this.ClientSize = new Size(window.Right - window.Left, window.Bottom - window.Top);
-                }                
+                    pos = new Point(window.Left + this.XOffset, window.Top + this.YOffset);
+                    siz = new Size(
+                        window.Right - window.Left - (2 * this.XOffset),
+                        window.Bottom - window.Top - (2 * this.YOffset));
+
+                    if (HalfSize)
+                    {
+                        pos.X = siz.Width / 3;
+                        pos.Y = siz.Height / 3;
+
+                        siz.Height = siz.Height / 2;
+                        siz.Width = siz.Width / 2;
+                    }
+                }
+
+                if (forceLocation.HasValue && forceSize.HasValue)
+                {
+                    pos = forceLocation.Value;
+                    siz = forceSize.Value;
+                }
+                
+                this.Location = pos;
+                this.ClientSize = siz;
             }
         }
 
