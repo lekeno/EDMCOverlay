@@ -10,3 +10,4 @@ Plugins/
 *.zip
 *.log
 *~
+.vscode/settings.json
