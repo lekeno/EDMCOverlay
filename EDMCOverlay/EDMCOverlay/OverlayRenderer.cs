@@ -23,13 +23,18 @@ namespace EDMCOverlay
 
         public const int VIRTUAL_ORIGIN_X = 20;
         public const int VIRTUAL_ORIGIN_Y = 40;
-        public const int VIRTUAL_WIDTH = 1350;
-        public const int VIRTUAL_HEIGHT = 1060;
+        public const int VIRTUAL_WIDTH = 1280;
+        public const int VIRTUAL_HEIGHT = 1024;
 
         Logger Logger = Logger.GetInstance(typeof(OverlayRenderer));
         
+        public bool ForceRender { get; set; }
+        public bool HalfSize { get; set; }
         public EDGlassForm Glass { get; set; }
         public Dictionary<String, InternalGraphic> Graphics { get; set; }
+
+        public Nullable<Point> ForceLocation { get; set; }
+        public Nullable<Size> ForceSize { get; set; }
 
         private bool run = true;
 
@@ -39,7 +44,7 @@ namespace EDMCOverlay
             if (process == null)
             {
                 Logger.LogMessage(String.Format("Can't find running {0}", EDProgramName));
-                System.Environment.Exit(0);
+                return null;
             }
             return process;
         }
@@ -276,6 +281,14 @@ namespace EDMCOverlay
 
                 if (Glass != null)
                 {
+                    Glass.XOffset = VIRTUAL_ORIGIN_X;
+                    Glass.YOffset = VIRTUAL_ORIGIN_Y;
+
+                    if (this.ForceLocation.HasValue && this.ForceSize.HasValue)
+                    {
+                        Glass.ForceGeometry(this.ForceLocation.Value, this.ForceSize.Value);
+                    }
+
                     if (Glass.Follow != null && Glass.Follow.HasExited)
                     {
                         Logger.LogMessage(String.Format("{0} has exited. quitting.", Glass.Follow.ProcessName));
@@ -296,41 +309,58 @@ namespace EDMCOverlay
 
                     bool foreground = (activeWindow == Glass.Follow.MainWindowHandle);
 
-                    // if there is nothing to draw, do a big sleep
-                    if (Graphics.Values.Count == 0 || !foreground)
-                    {
+                    if (!foreground)
                         Debug.WriteLine("window obscured");
+
+                    bool render = (foreground && (Graphics.Values.Count > 0)) || this.ForceRender;
+
+                    if (render)
+                    {
+                        lock (Graphics)
+                        {
+                            Draw(draw);
+                            swapBuffers(bufg);
+                            Glass.FollowWindow();
+                        }
+                    } else {
+                        // nothing to draw, clear and sleep a long sleep                        
                         Clear(draw);
                         swapBuffers(bufg);
-                        Thread.Sleep(1000);
-                    } else {
-                        if (foreground)
-                        {
-                            lock (Graphics)
-                            {
-                                Draw(draw);
-                                swapBuffers(bufg);
-                                Glass.FollowWindow();
-                            }
-                        }
+                        Thread.Sleep(1000);                    
                     }
                     lastframe = DateTime.Now;
                 }
             }
         }
-        
+
+        Size GetClientSize()
+        {
+            if (this.Glass != null)
+            {
+                return this.Glass.ClientSize;
+            }
+
+            var sz = new Size(1, 1);
+            return sz;
+        }
 
         Point Scale(int x, int y)
         {
             Point p = new Point();
+            Size csize = GetClientSize();
+            double x_factor = csize.Width / (double)(VIRTUAL_WIDTH + 32);
+            double y_factor = csize.Height / (double)(VIRTUAL_HEIGHT + 18);
 
-            double x_factor = this.Glass.ClientSize.Width / (double)(VIRTUAL_WIDTH);
-            double y_factor = this.Glass.ClientSize.Height / (double)(VIRTUAL_HEIGHT);
-
-            p.X = VIRTUAL_ORIGIN_X + (int)Math.Round(x * x_factor);
-            p.Y = VIRTUAL_ORIGIN_Y + (int)Math.Round(y * y_factor);
+            p.X = (int)Math.Round(x * x_factor);
+            p.Y = (int)Math.Round(y * y_factor);
 
             return p;
+        }
+
+        Point ScalePosition(int x, int y)
+        {
+            Point scaled = Scale(x, y);            
+            return scaled;
         }
 
         private void DrawMarker(Graphics draw, VectorPoint marker)
@@ -343,12 +373,14 @@ namespace EDMCOverlay
             if ( marker.Marker.Equals("cross"))
             {
                 // draw 2 lines
-                draw.DrawLine(p, Scale(marker.X - 3, marker.Y - 3), Scale(marker.X + 3, marker.Y + 3));
-                draw.DrawLine(p, Scale(marker.X + 3, marker.Y - 3), Scale(marker.X - 3, marker.Y + 3));
+                draw.DrawLine(p, ScalePosition(marker.X - 3, marker.Y - 3), ScalePosition(marker.X + 3, marker.Y + 3));
+                draw.DrawLine(p, ScalePosition(marker.X + 3, marker.Y - 3), ScalePosition(marker.X - 3, marker.Y + 3));
             }
             if ( marker.Marker.Equals("circle"))
             {
-                draw.DrawEllipse(p, new Rectangle(Scale(marker.X - 4, marker.Y - 4), new Size(6, 6)));
+                var circlebounds = new Rectangle(ScalePosition(marker.X - 4, marker.Y - 4),
+                    new Size(Scale(8, 8)));
+                draw.DrawEllipse(p, circlebounds);
             }
         }
 
@@ -356,7 +388,7 @@ namespace EDMCOverlay
         {
             if (brush == null) return;
             Pen p = new Pen(brush);
-            draw.DrawLine(p, Scale(start.X, start.Y), Scale(end.X, end.Y));
+            draw.DrawLine(p, ScalePosition(start.X, start.Y), Scale(end.X, end.Y));
         }
 
         private void DrawVector(Graphics draw, Graphic start, bool erase)
@@ -390,6 +422,10 @@ namespace EDMCOverlay
         {
             if (g.Shape.Equals(GraphicType.SHAPE_RECT))
             {
+                Rectangle shapeRect = new Rectangle(
+                    ScalePosition(g.X, g.Y),
+                    new Size(Scale(g.W, g.H)));
+
                 Brush fill = GetBrush(g.Fill);
                 Rectangle shapeRect = new Rectangle(Scale(g.X, g.Y), new Size(Scale(g.W, g.H)));
                 if (fill != null)
@@ -398,9 +434,8 @@ namespace EDMCOverlay
                 }
 
                 Brush paint = GetBrush(g.Color);
-                if (paint != null) { 
-                    Pen p = new Pen(paint);
-                    draw.DrawRectangle(p, shapeRect);
+                if (paint != null) {                     
+                    draw.DrawRectangle(new Pen(paint), shapeRect);
                 }
             } else
             {
@@ -421,8 +456,18 @@ namespace EDMCOverlay
         private void DrawTextEx(Graphics draw, String fontsize, String fontcolor, String text, int x, int y)
         {
             if (String.IsNullOrWhiteSpace(text)) return;
+            int textwidth = 8 * text.Length;
+            Point loc = ScalePosition(x, y);
+            Size csize = GetClientSize();
+            if ( loc.Y > csize.Height - 20)
+            {
+                loc.Y -= 25;
+            }
+            if ( loc.X > csize.Width - 10 - textwidth)
+            {
+                loc.X -= 10 + textwidth;
+            }
 
-            Point loc = Scale(x, y);
             Font size = normalFont;
             if (fontsize != null)
                 fontSizes.TryGetValue(fontsize, out size);
