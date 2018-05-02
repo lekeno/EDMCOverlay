@@ -14,4 +14,3 @@ Plugins/
 *.Json.xml
 *.pdb
 *.vshost.exe*
-.vscode/settings.json
