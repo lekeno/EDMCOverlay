@@ -86,6 +86,24 @@ class Overlay(object):
         connection = socket.socket()
         connection.connect((self.server, self.port))
         self.connection = connection
+    
+    def send_raw(self, msg):
+        """
+        Encode a dict and send it to the server
+        :param msg:
+        :return:
+        """
+        assert isinstance(msg, dict)
+
+        try:
+            data = json.dumps(msg)
+            self.connection.send(data)
+            self.connection.send("\n")
+        except Exception as err:
+            print "error in send_raw: {}".format(err)
+            self.connection = None
+            raise
+        return None
 
     def send_shape(self, shapeid, shape, color, fill, x, y, w, h, ttl):
         """
@@ -113,32 +131,7 @@ class Overlay(object):
                "w": w, "h": h,
                "ttl": ttl
                }
-        try:
-            print json.dumps(msg)
-            self.connection.send(json.dumps(msg))
-            self.connection.send("\n")
-        except Exception as err:
-            print "error in send_shape: {}".format(err)
-            self.connection = None
-            raise
-    
-    def send_raw(self, msg):
-        """
-        Encode a dict and send it to the server
-        :param msg:
-        :return:
-        """
-        assert isinstance(msg, dict)
-
-        try:
-            data = json.dumps(msg)
-            self.connection.send(data)
-            self.connection.send("\n")
-        except Exception as err:
-            print "error in send_raw: {}".format(err)
-            self.connection = None
-            raise
-        return None
+        self.send_raw(msg)
 
     def send_message(self, msgid, text, color, x, y, ttl=4, size="normal"):
         """
